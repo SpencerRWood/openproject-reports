@@ -26,6 +26,7 @@ dependencies = [
     "google-auth>=2.40",
     "google-api-python-client>=2.170",
     "dagster-postgres==0.29.24",
+    "psycopg[binary]>=3.2,<4",
 ]
 
 [dependency-groups]
