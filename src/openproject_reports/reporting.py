@@ -33,6 +33,7 @@ FIELDS = (
     "completed_month",
 )
 COMPLETE_STATUSES = {"done", "closed"}
+NON_OPEN_STATUSES = {"rejected"}
 IN_PROGRESS_STATUSES = {"in progress"}
 BLOCKED_STATUSES = {"blocked"}
 
@@ -70,7 +71,9 @@ def normalize(
     closed = _datetime(item.get("closedAt"))
     completed = closed.astimezone(zone).date() if closed else None
     status = str(_link(item, "status").get("title") or "")
-    is_complete = status.casefold() in COMPLETE_STATUSES
+    normalized_status = status.casefold()
+    is_complete = normalized_status in COMPLETE_STATUSES
+    is_open = not is_complete and normalized_status not in NON_OPEN_STATUSES
     description = item.get("description") or {}
     if not isinstance(description, dict):
         description = {}
@@ -92,7 +95,7 @@ def normalize(
         "due_date": _date(item.get("dueDate")),
         "closed_at": closed,
         "url": f"{base_url.rstrip('/')}/work_packages/{work_package_id}",
-        "is_open": not is_complete,
+        "is_open": is_open,
         "is_complete": is_complete,
         "age_days": (today - created.astimezone(zone).date()).days if created else None,
         "days_since_update": (today - updated.astimezone(zone).date()).days
