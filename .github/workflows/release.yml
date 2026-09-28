@@ -22,7 +22,7 @@ jobs:
 
   promotion:
     needs: [release, container]
-    if: ${{ needs.release.outputs.released == 'true' && needs.container.result == 'success' && vars.OPENPROJECT_REPORTS_PROMOTION_ENABLED == 'true' }}
+    if: ${{ needs.release.outputs.released == 'true' && needs.container.result == 'success' }}
     uses: SpencerRWood/workflows/.github/workflows/promote-container-to-dev.yml@v2
     permissions:
       contents: read
