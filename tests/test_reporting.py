@@ -142,6 +142,53 @@ def test_dataset_rollups_and_workbook():
     assert book["Work Packages"].auto_filter.ref == book["Work Packages"].dimensions
 
 
+@pytest.mark.parametrize(
+    ("status", "is_complete", "is_open"),
+    [
+        ("Closed", True, False),
+        ("Done", True, False),
+        ("In Progress", False, True),
+        ("Blocked", False, True),
+        ("rejected", False, False),
+        ("Rejected", False, False),
+        ("REJECTED", False, False),
+    ],
+)
+def test_status_classification(status, is_complete, is_open):
+    row = dataset([package(1, status)], "https://example.test", NOW, "UTC")[0]
+    assert row["status"] == status
+    assert row["is_complete"] is is_complete
+    assert row["is_open"] is is_open
+
+
+def test_rejected_remains_in_work_packages_but_not_rollups():
+    rows = dataset(
+        [package(1, "In Progress"), package(2, "Closed"), package(3, "Rejected")],
+        "https://example.test",
+        NOW,
+        "UTC",
+    )
+    assert [row["status"] for row in rows] == ["In Progress", "Closed", "Rejected"]
+    project = projects(rows, NOW.date())[0]
+    assert project["total_work_packages"] == 3
+    assert project["open"] == 1
+    assert project["completed"] == 1
+    assert progress(rows, NOW.date())[0]["remaining_open_as_of_run"] == 1
+
+    book = load_workbook(
+        BytesIO(build_workbook(rows, NOW, "https://example.test", "UTC"))
+    )
+    work_packages = book["Work Packages"]
+    headers = [cell.value for cell in work_packages[1]]
+    rejected = dict(
+        zip(headers, (cell.value for cell in work_packages[4]), strict=True)
+    )
+    assert work_packages.max_row == 4
+    assert rejected["status"] == "Rejected"
+    assert rejected["is_open"] is False
+    assert rejected["is_complete"] is False
+
+
 def test_config_validation():
     with pytest.raises(ValueError, match="Missing runtime settings"):
         load_config({})
