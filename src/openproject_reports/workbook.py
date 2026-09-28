@@ -60,17 +60,19 @@ def _table(
                 cell.number_format = "yyyy-mm-dd"
 
 
-def build_workbook(
+def build_workbook(  # noqa: PLR0913
     rows: list[dict[str, Any]],
     generated_at: datetime,
     base_url: str,
     timezone: str,
+    *,
     drive_file_id: str | None = None,
+    project_catalog: list[dict[str, Any]] | None = None,
 ) -> bytes:
     book = Workbook()
     book.remove(book.active)
     today = generated_at.date()
-    project_rows = projects(rows, today)
+    project_rows = projects(rows, today, project_catalog)
     _table(book, "Work Packages", FIELDS, rows)
     _table(book, "Projects", PROJECT_FIELDS, project_rows)
     _table(book, "Progress", PROGRESS_FIELDS, progress(rows, today))

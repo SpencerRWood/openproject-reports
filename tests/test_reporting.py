@@ -78,12 +78,35 @@ def test_dataset_rollups_and_workbook():
     assert rows[1]["completed_week"] == "2026-W39"
     assert rows[0]["is_open"] is True
     assert projects(rows, NOW.date())[0]["completed"] == 1
+    assert (
+        projects(
+            rows,
+            NOW.date(),
+            [{"id": 2, "name": "Project B"}, {"id": 3, "name": "Empty"}],
+        )[1]["total_work_packages"]
+        == 0
+    )
     assert progress(rows, NOW.date())[0]["cumulative_completions"] == 1
     book = load_workbook(
         BytesIO(build_workbook(rows, NOW, "https://example.test", "America/New_York"))
     )
     assert book.sheetnames == ["Work Packages", "Projects", "Progress", "Metadata"]
     assert book["Work Packages"].max_row == 3
+    catalog_book = load_workbook(
+        BytesIO(
+            build_workbook(
+                rows,
+                NOW,
+                "https://example.test",
+                "America/New_York",
+                project_catalog=[
+                    {"id": 2, "name": "Project B"},
+                    {"id": 3, "name": "Empty"},
+                ],
+            )
+        )
+    )
+    assert catalog_book["Projects"].max_row == 3
     assert book["Work Packages"].freeze_panes == "A2"
     assert book["Work Packages"].auto_filter.ref == book["Work Packages"].dimensions
 
@@ -103,6 +126,6 @@ def test_config_validation():
 
 
 def test_definitions_registered():
-    assert len(defs.resolve_asset_graph().get_all_asset_keys()) == 4
+    assert len(defs.resolve_asset_graph().get_all_asset_keys()) == 5
     assert defs.get_job_def("openproject_full_refresh")
     assert defs.get_schedule_def("openproject_daily")

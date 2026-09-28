@@ -122,10 +122,26 @@ def dataset(
     return [by_id[key] for key in sorted(by_id)]
 
 
-def projects(rows: list[dict[str, Any]], today: date) -> list[dict[str, Any]]:
+def projects(
+    rows: list[dict[str, Any]],
+    today: date,
+    catalog: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     groups: dict[tuple[int | None, str | None], list[dict[str, Any]]] = {}
+    for project in catalog or []:
+        groups[(int(project["id"]), str(project["name"]))] = []
     for row in rows:
-        groups.setdefault((row["project_id"], row["project"]), []).append(row)
+        key = (row["project_id"], row["project"])
+        if catalog is not None and row["project_id"] is not None:
+            key = next(
+                (
+                    candidate
+                    for candidate in groups
+                    if candidate[0] == row["project_id"]
+                ),
+                key,
+            )
+        groups.setdefault(key, []).append(row)
     result = []
     for (project_id, name), items in sorted(
         groups.items(), key=lambda entry: (entry[0][0] or 0, entry[0][1] or "")

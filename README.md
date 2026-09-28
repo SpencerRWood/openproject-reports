@@ -4,9 +4,9 @@ Daily OpenProject status workbook, published to a single persistent Google Drive
 
 ## Data flow
 
-`openproject_work_packages` → `openproject_reporting_dataset` → `openproject_status_workbook` → `google_drive_openproject_report`. The `openproject_full_refresh` job runs daily at 06:00 America/New_York via `openproject_daily`. The extraction uses `/api/v3/work_packages` with `filters=[]` to disable OpenProject's default status filter and paginates through every page.
+`openproject_work_packages` and `openproject_projects` → `openproject_reporting_dataset` → `openproject_status_workbook` → `google_drive_openproject_report`. The `openproject_full_refresh` job runs daily at 06:00 America/New_York via `openproject_daily`. The extraction uses `/api/v3/work_packages` with `filters=[]` to disable OpenProject's default status filter and paginates through every page.
 
-The four sheets are Work Packages, Projects, Progress, and Metadata. Weekly progress uses actual completion dates only. The current open count is labeled as a run snapshot.
+The four sheets are Work Packages, Projects, Progress, and Metadata. Projects includes visible projects with zero work packages. Weekly progress uses actual completion dates only. The current open count is labeled as a run snapshot.
 
 ## Runtime settings
 

@@ -18,6 +18,11 @@ def openproject_work_packages(runtime: RuntimeResource) -> list[dict[str, Any]]:
 
 
 @asset
+def openproject_projects(runtime: RuntimeResource) -> list[dict[str, Any]]:
+    return runtime.openproject().projects()
+
+
+@asset
 def openproject_reporting_dataset(
     runtime: RuntimeResource, openproject_work_packages: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -32,7 +37,9 @@ def openproject_reporting_dataset(
 
 @asset
 def openproject_status_workbook(
-    runtime: RuntimeResource, openproject_reporting_dataset: list[dict[str, Any]]
+    runtime: RuntimeResource,
+    openproject_reporting_dataset: list[dict[str, Any]],
+    openproject_projects: list[dict[str, Any]],
 ) -> bytes:
     settings = runtime.settings()
     file_id = find_canonical_id(
@@ -43,7 +50,8 @@ def openproject_status_workbook(
         datetime.now(UTC).astimezone(ZoneInfo(settings.timezone)),
         settings.openproject_base_url,
         settings.timezone,
-        file_id,
+        drive_file_id=file_id,
+        project_catalog=openproject_projects,
     )
 
 

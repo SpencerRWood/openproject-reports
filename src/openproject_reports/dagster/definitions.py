@@ -4,6 +4,7 @@ from dagster import Definitions, mem_io_manager
 
 from openproject_reports.dagster.assets import (
     google_drive_openproject_report,
+    openproject_projects,
     openproject_reporting_dataset,
     openproject_status_workbook,
     openproject_work_packages,
@@ -15,7 +16,9 @@ from openproject_reports.dagster.schedules import openproject_daily
 defs = Definitions(
     assets=[
         openproject_work_packages,
+        openproject_projects,
         openproject_reporting_dataset,
+        openproject_projects,
         openproject_status_workbook,
         google_drive_openproject_report,
     ],

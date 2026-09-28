@@ -14,17 +14,34 @@ class OpenProjectClient:
         self.session.auth = ("apikey", token)
 
     def work_packages(self, page_size: int = 100) -> list[dict[str, Any]]:
+        return self._collection(
+            "work_packages", page_size, {"filters": "[]", "sortBy": '[["id","asc"]]'}
+        )
+
+    def projects(self, page_size: int = 100) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in self._collection(
+                "projects",
+                page_size,
+                {"filters": "[]", "sortBy": '[["id","asc"]]'},
+            )
+            if item.get("_type", "Project") == "Project"
+        ]
+
+    def _collection(
+        self, endpoint: str, page_size: int, extra_params: dict[str, str]
+    ) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         offset = 1
         while True:
             params: dict[str, str | int] = {
                 "offset": offset,
                 "pageSize": page_size,
-                "filters": "[]",
-                "sortBy": '[["id","asc"]]',
+                **extra_params,
             }
             response = self.session.get(
-                f"{self.base_url}/api/v3/work_packages",
+                f"{self.base_url}/api/v3/{endpoint}",
                 params=params,
                 timeout=60,
             )
@@ -38,7 +55,5 @@ class OpenProjectClient:
             if len(rows) >= total:
                 return rows
             if not elements:
-                raise ValueError(
-                    "OpenProject returned an incomplete work package collection"
-                )
+                raise ValueError("OpenProject returned an incomplete collection")
             offset += 1
