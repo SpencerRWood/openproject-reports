@@ -1,6 +1,6 @@
 """Importable code location for the shared Beelink Dagster deployment."""
 
-from dagster import Definitions
+from dagster import Definitions, mem_io_manager
 
 from openproject_reports.dagster.assets import (
     google_drive_openproject_report,
@@ -21,5 +21,5 @@ defs = Definitions(
     ],
     jobs=[openproject_full_refresh],
     schedules=[openproject_daily],
-    resources={"runtime": RuntimeResource()},
+    resources={"runtime": RuntimeResource(), "io_manager": mem_io_manager},
 )

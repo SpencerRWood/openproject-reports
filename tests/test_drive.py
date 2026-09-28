@@ -51,3 +51,13 @@ def test_duplicate_file_fails_closed():
     with pytest.raises(ValueError, match="Multiple canonical"):
         publish(files, "folder", "OpenProject Status.xlsx", b"data")
     assert files.creates == files.updates == 0
+
+
+def test_wrong_mime_type_fails_closed():
+    files = FakeFiles()
+    files.files = [
+        {"id": "stable-id", "mimeType": "application/vnd.google-apps.spreadsheet"}
+    ]
+    with pytest.raises(ValueError, match="unexpected MIME type"):
+        publish(files, "folder", "OpenProject Status.xlsx", b"data")
+    assert files.updates == files.creates == 0

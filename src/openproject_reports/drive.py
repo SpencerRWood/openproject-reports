@@ -50,6 +50,8 @@ def find_canonical_id(files: DriveFiles, folder_id: str, filename: str) -> str |
             break
     if len(matches) > 1:
         raise ValueError("Multiple canonical report files exist; refusing to publish")
+    if matches and matches[0].get("mimeType") != XLSX_MIME:
+        raise ValueError("Canonical file has an unexpected MIME type")
     return str(matches[0]["id"]) if matches else None
 
 
