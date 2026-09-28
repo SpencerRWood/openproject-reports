@@ -49,6 +49,8 @@ class Session:
     def get(self, url, params, timeout):
         assert url.endswith("/work_packages")
         assert timeout == 60
+        assert params["filters"] == "[]"
+        assert params["sortBy"] == '[["id","asc"]]'
         self.offsets.append(params["offset"])
         identifier = params["offset"]
         return Response(

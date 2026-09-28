@@ -17,9 +17,15 @@ class OpenProjectClient:
         rows: list[dict[str, Any]] = []
         offset = 1
         while True:
+            params: dict[str, str | int] = {
+                "offset": offset,
+                "pageSize": page_size,
+                "filters": "[]",
+                "sortBy": '[["id","asc"]]',
+            }
             response = self.session.get(
                 f"{self.base_url}/api/v3/work_packages",
-                params={"offset": offset, "pageSize": page_size},
+                params=params,
                 timeout=60,
             )
             response.raise_for_status()
@@ -29,6 +35,10 @@ class OpenProjectClient:
             )
             rows.extend(elements)
             total = int(data.get("total", len(rows)))
-            if not elements or len(rows) >= total:
+            if len(rows) >= total:
                 return rows
+            if not elements:
+                raise ValueError(
+                    "OpenProject returned an incomplete work package collection"
+                )
             offset += 1
