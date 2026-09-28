@@ -19,7 +19,14 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
 ]
-dependencies = ["dagster>=1.12,<2", "requests>=2.32", "openpyxl>=3.1", "google-auth>=2.40", "google-api-python-client>=2.170"]
+dependencies = [
+    "dagster>=1.12,<2",
+    "requests>=2.32",
+    "openpyxl>=3.1",
+    "google-auth>=2.40",
+    "google-api-python-client>=2.170",
+    "dagster-postgres==0.29.24",
+]
 
 [dependency-groups]
 dev = [
