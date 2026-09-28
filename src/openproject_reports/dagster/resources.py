@@ -18,4 +18,8 @@ class RuntimeResource(ConfigurableResource["RuntimeResource"]):
         )
 
     def drive_files(self) -> DriveFiles:
-        return authenticated_files(self.settings().google_service_account_json)
+        settings = self.settings()
+        return authenticated_files(
+            settings.google_drive_credentials_json,
+            settings.google_drive_impersonated_user,
+        )

@@ -1,4 +1,5 @@
 # mypy: disable-error-code="no-untyped-def,no-untyped-call,import-untyped,type-arg"
+import json
 from datetime import UTC, datetime
 from io import BytesIO
 
@@ -65,6 +66,36 @@ def test_pagination_retains_completed():
     assert [row["id"] for row in rows] == [1, 2]
 
 
+def test_project_catalog_paginates_and_excludes_non_projects():
+    class ProjectSession(Session):
+        def get(self, url, params, timeout):
+            assert url.endswith("/projects")
+            assert timeout == 60
+            assert params["filters"] == "[]"
+            self.offsets.append(params["offset"])
+            identifier = params["offset"]
+            item_type = "Project" if identifier == 1 else "Program"
+            return Response(
+                {
+                    "total": 2,
+                    "_embedded": {
+                        "elements": [
+                            {
+                                "id": identifier,
+                                "name": f"P{identifier}",
+                                "_type": item_type,
+                            }
+                        ]
+                    },
+                }
+            )
+
+    session = ProjectSession()
+    rows = OpenProjectClient("https://example.test", "token", session).projects(1)  # type: ignore[arg-type]
+    assert session.offsets == [1, 2]
+    assert [row["name"] for row in rows] == ["P1"]
+
+
 def test_dataset_rollups_and_workbook():
     rows = dataset(
         [package(2, "Closed"), package(1, "In Progress"), package(2, "Closed")],
@@ -118,11 +149,29 @@ def test_config_validation():
         {
             "OPENPROJECT_BASE_URL": "https://example.test/",
             "OPENPROJECT_API_TOKEN": "secret",
-            "GOOGLE_SERVICE_ACCOUNT_JSON": "{}",
+            "GOOGLE_DRIVE_CREDENTIALS_JSON": json.dumps(
+                {
+                    "type": "authorized_user",
+                    "client_id": "a",
+                    "client_secret": "b",
+                    "refresh_token": "c",
+                }
+            ),
             "GOOGLE_DRIVE_FOLDER_ID": "folder",
         }
     )
     assert settings.openproject_base_url == "https://example.test"
+    with pytest.raises(ValueError, match="My Drive needs user OAuth"):
+        load_config(
+            {
+                "OPENPROJECT_BASE_URL": "https://example.test",
+                "OPENPROJECT_API_TOKEN": "secret",
+                "GOOGLE_DRIVE_CREDENTIALS_JSON": json.dumps(
+                    {"type": "service_account"}
+                ),
+                "GOOGLE_DRIVE_FOLDER_ID": "folder",
+            }
+        )
 
 
 def test_definitions_registered():

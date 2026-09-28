@@ -4,6 +4,7 @@ import io
 import json
 from typing import Any, Protocol
 
+from google.oauth2 import credentials as user_credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.http import MediaIoBaseUpload  # type: ignore[import-untyped]
@@ -17,13 +18,24 @@ class DriveFiles(Protocol):
     def update(self, **kwargs: Any) -> Any: ...
 
 
-def authenticated_files(service_account_json: str) -> DriveFiles:
-    info = json.loads(service_account_json)
-    credentials = service_account.Credentials.from_service_account_info(
-        info,
-        scopes=["https://www.googleapis.com/auth/drive"],  # type: ignore[no-untyped-call]
-    )
-    return build("drive", "v3", credentials=credentials, cache_discovery=False).files()  # type: ignore[no-any-return]
+def authenticated_files(
+    credentials_json: str, impersonated_user: str | None = None
+) -> DriveFiles:
+    info = json.loads(credentials_json)
+    scopes = ["https://www.googleapis.com/auth/drive"]
+    if info.get("type") == "authorized_user":
+        credentials = user_credentials.Credentials.from_authorized_user_info(  # type: ignore[no-untyped-call]
+            info, scopes=scopes
+        )
+    elif info.get("type") == "service_account" and impersonated_user:
+        credentials = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
+            info, scopes=scopes
+        ).with_subject(impersonated_user)
+    else:
+        raise ValueError("My Drive requires authorized-user OAuth or user delegation")
+    return build(  # type: ignore[no-any-return]
+        "drive", "v3", credentials=credentials, cache_discovery=False
+    ).files()
 
 
 def find_canonical_id(files: DriveFiles, folder_id: str, filename: str) -> str | None:
