@@ -6,23 +6,14 @@ on:
 
 jobs:
   release:
-    uses: SpencerRWood/workflows/.github/workflows/release.yml@v1
+    uses: SpencerRWood/workflows/.github/workflows/release-container.yml@v3
     permissions:
       contents: write
-
-  container:
-    needs: release
-    if: ${{ needs.release.outputs.released == 'true' }}
-    uses: SpencerRWood/workflows/.github/workflows/container-release.yml@v1
-    permissions:
-      contents: read
       packages: write
-    with:
-      release_tag: ${{ needs.release.outputs.release_tag }}
 
   promotion:
-    needs: [release, container]
-    if: ${{ needs.release.outputs.released == 'true' && needs.container.result == 'success' }}
+    needs: release
+    if: ${{ needs.release.outputs.released == 'true' }}
     uses: SpencerRWood/workflows/.github/workflows/promote-container-to-dev.yml@v2
     permissions:
       contents: read
@@ -31,9 +22,9 @@ jobs:
       image_key: openproject_reports_image_ref
       image_name: openproject-reports
       release_tag: ${{ needs.release.outputs.release_tag }}
-      image_repository: ${{ needs.container.outputs.image_repository }}
-      version_image: ${{ needs.container.outputs.version_image }}
-      image_digest: ${{ needs.container.outputs.image_digest }}
-      version_image_digest: ${{ needs.container.outputs.version_image_digest }}
+      image_repository: ${{ needs.release.outputs.image_repository }}
+      version_image: ${{ needs.release.outputs.version_image }}
+      image_digest: ${{ needs.release.outputs.image_digest }}
+      version_image_digest: ${{ needs.release.outputs.version_image_digest }}
     secrets:
       infrastructure_token: ${{ secrets.INFRASTRUCTURE_PR_TOKEN }}

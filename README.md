@@ -14,6 +14,15 @@ Infrastructure dev injects these through Infisical: `OPENPROJECT_BASE_URL`, `OPE
 
 Publisher lookup is scoped to that folder and exact name. It refuses multiple matches, creates on first run, and updates media by the existing file ID thereafter.
 
+## Release and deployment
+
+Pull requests use the shared `validate.yml@v3` workflow. A push to `main`
+uses `release-container.yml@v3` to validate the project, build and verify the
+GHCR image, then publish the semantic Git tag and GitHub Release. A successful
+release passes the digest-qualified image to the separate
+`promote-container-to-dev.yml@v2` contract. The application repository owns
+the image; infrastructure owns the dev image pin and deployment.
+
 ## Development
 
 `uv lock && uv sync --frozen --group dev`, then `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`, `uv build`, and `uv run pre-commit run --all-files`.
