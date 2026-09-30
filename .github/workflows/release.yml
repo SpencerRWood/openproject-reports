@@ -6,7 +6,8 @@ on:
 
 jobs:
   release:
-    uses: SpencerRWood/workflows/.github/workflows/release-container.yml@v3
+    # v3-compatible online lock fix (workflows PR #26).
+    uses: SpencerRWood/workflows/.github/workflows/release-container.yml@2aac1f22424d86a45b9d4dfe5f772ea10ee9ecc7
     permissions:
       contents: write
       packages: write
