@@ -1,5 +1,6 @@
 """Canonical rows and factual progress rollups."""
 
+import re
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -17,6 +18,13 @@ FIELDS = (
     "assignee",
     "parent_id",
     "version",
+    "release_id",
+    "release",
+    "initiative_id",
+    "initiative",
+    "epic_id",
+    "epic",
+    "implementation_summary",
     "created_at",
     "updated_at",
     "start_date",
@@ -89,6 +97,8 @@ def normalize(
         "assignee": _link(item, "assignee").get("title"),
         "parent_id": _linked_id(item, "parent"),
         "version": _link(item, "version").get("title"),
+        "release_id": _linked_id(item, "version"),
+        "release": _link(item, "version").get("title"),
         "created_at": created,
         "updated_at": updated,
         "start_date": _date(item.get("startDate")),
@@ -110,19 +120,75 @@ def normalize(
     }
 
 
+def is_story(item: dict[str, Any]) -> bool:
+    return str(_link(item, "type").get("title") or "").strip().casefold() == "story"
+
+
+def implementation_summary(activities: list[dict[str, Any]]) -> str | None:
+    """Select the newest explicitly labelled implementation comment, not history."""
+    candidates = []
+    for activity in activities:
+        comment = activity.get("comment") or {}
+        raw = comment.get("raw") if isinstance(comment, dict) else None
+        if not isinstance(raw, str) or not re.match(
+            r"^\s*(?:#{1,6}\s*)?implementation (?:update|summary)\b",
+            raw,
+            re.IGNORECASE,
+        ):
+            continue
+        candidates.append(activity)
+    if not candidates:
+        return None
+    latest = max(
+        candidates,
+        key=lambda activity: (
+            _datetime(activity.get("createdAt")) or datetime.min.replace(tzinfo=UTC),
+            int(activity.get("id", 0)),
+        ),
+    )
+    return str(latest["comment"]["raw"]).strip()
+
+
 def dataset(
-    items: list[dict[str, Any]], base_url: str, now: datetime, timezone: str
+    items: list[dict[str, Any]],
+    base_url: str,
+    now: datetime,
+    timezone: str,
+    *,
+    activities: dict[int, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
+    # Keep the full hierarchy for resolution, but emit only operational Stories.
     by_id: dict[int, dict[str, Any]] = {}
     for item in items:
-        row = normalize(item, base_url, now, timezone)
-        key = row["work_package_id"]
+        key = int(item["id"])
         previous = by_id.get(key)
         if previous is None or (
-            row["updated_at"] or datetime.min.replace(tzinfo=UTC)
-        ) > (previous["updated_at"] or datetime.min.replace(tzinfo=UTC)):
-            by_id[key] = row
-    return [by_id[key] for key in sorted(by_id)]
+            _datetime(item.get("updatedAt")) or datetime.min.replace(tzinfo=UTC)
+        ) > (_datetime(previous.get("updatedAt")) or datetime.min.replace(tzinfo=UTC)):
+            by_id[key] = item
+    rows = []
+    for key, item in sorted(by_id.items()):
+        if not is_story(item):
+            continue
+        row = normalize(item, base_url, now, timezone)
+        row.update(initiative_id=None, initiative=None, epic_id=None, epic=None)
+        seen = {key}
+        parent_id = row["parent_id"]
+        while parent_id is not None and parent_id not in seen:
+            seen.add(parent_id)
+            parent = by_id.get(parent_id)
+            if parent is None:
+                break
+            kind = str(_link(parent, "type").get("title") or "").casefold()
+            if kind in {"initiative", "epic"} and row[f"{kind}_id"] is None:
+                row[f"{kind}_id"] = parent_id
+                row[kind] = parent.get("subject")
+            parent_id = _linked_id(parent, "parent")
+        row["implementation_summary"] = implementation_summary(
+            (activities or {}).get(key, [])
+        )
+        rows.append(row)
+    return rows
 
 
 def projects(
@@ -130,6 +196,7 @@ def projects(
     today: date,
     catalog: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    rows = [row for row in rows if str(row.get("type") or "").casefold() == "story"]
     groups: dict[tuple[int | None, str | None], list[dict[str, Any]]] = {}
     for project in catalog or []:
         groups[(int(project["id"]), str(project["name"]))] = []
@@ -182,6 +249,7 @@ def projects(
 
 
 def progress(rows: list[dict[str, Any]], today: date) -> list[dict[str, Any]]:
+    rows = [row for row in rows if str(row.get("type") or "").casefold() == "story"]
     # Completion dates are the only available history; current open count is a snapshot.
     counts = Counter(
         row["completed_week"]

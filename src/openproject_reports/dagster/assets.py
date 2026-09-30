@@ -8,7 +8,7 @@ from dagster import AssetExecutionContext, asset
 
 from openproject_reports.dagster.resources import RuntimeResource
 from openproject_reports.drive import find_canonical_id, publish
-from openproject_reports.reporting import dataset
+from openproject_reports.reporting import dataset, is_story
 from openproject_reports.workbook import build_workbook
 
 
@@ -27,11 +27,18 @@ def openproject_reporting_dataset(
     runtime: RuntimeResource, openproject_work_packages: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     settings = runtime.settings()
+    client = runtime.openproject()
+    activities = {
+        int(item["id"]): client.activities(int(item["id"]))
+        for item in openproject_work_packages
+        if is_story(item)
+    }
     return dataset(
         openproject_work_packages,
         settings.openproject_base_url,
         datetime.now(UTC),
         settings.timezone,
+        activities=activities,
     )
 
 

@@ -6,7 +6,9 @@ Daily OpenProject status workbook, published to a single persistent Google Drive
 
 `openproject_work_packages` and `openproject_projects` → `openproject_reporting_dataset` → `openproject_status_workbook` → `google_drive_openproject_report`. The `openproject_full_refresh` job runs daily at 06:00 America/New_York via `openproject_daily`. The extraction uses `/api/v3/work_packages` with `filters=[]` to disable OpenProject's default status filter and paginates through every page.
 
-The four sheets are Work Packages, Projects, Progress, and Metadata. Projects includes visible projects with zero work packages. Weekly progress uses actual completion dates only. The current open count is labeled as a run snapshot.
+The four sheets are Work Packages, Projects, Progress, and Metadata (schema version 2). Work Packages contains only Stories, including completed and rejected Stories. Initiative/Epic IDs and subjects are resolved through the full parent hierarchy and retained as context columns; release ID/name, the legacy version column, and OpenProject URL are preserved. Projects includes visible projects with zero Stories; `total_work_packages` now counts Stories only. Initiative, Epic, Task, Spike, and Milestone statuses do not contribute to operational counts or progress.
+
+Each refresh retrieves paginated activities only for Stories. `implementation_summary` contains the newest comment whose opening heading is `Implementation update` (including the standard `Implementation update (WP-<id>)`) or `Implementation summary`, case-insensitively, with an optional Markdown heading. Creation timestamp and activity ID determine the latest comment; later discussion and system updates are ignored. Stories without a labelled summary have a blank field. The workbook does not include activity history. Missing ancestors remain blank, and cycles terminate safely. Weekly progress uses actual completion dates only. The current open count is labeled as a run snapshot.
 
 ## Runtime settings
 
@@ -26,3 +28,7 @@ the image; infrastructure owns the dev image pin and deployment.
 ## Development
 
 `uv lock && uv sync --frozen --group dev`, then `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`, `uv build`, and `uv run pre-commit run --all-files`.
+
+## OpenProject planning
+
+Initiative 407 (OpenProject Reports) in Wood Platform, Epic 408 (Reporting model enhancements), and planning release R1 (version 20) track this reporting model work.
