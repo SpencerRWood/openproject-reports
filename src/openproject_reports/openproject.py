@@ -18,6 +18,9 @@ class OpenProjectClient:
             "work_packages", page_size, {"filters": "[]", "sortBy": '[["id","asc"]]'}
         )
 
+    def activities(self, story_id: int, page_size: int = 100) -> list[dict[str, Any]]:
+        return self._collection(f"work_packages/{story_id}/activities", page_size, {})
+
     def projects(self, page_size: int = 100) -> list[dict[str, Any]]:
         return [
             item

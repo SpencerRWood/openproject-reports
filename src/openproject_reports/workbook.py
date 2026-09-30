@@ -71,6 +71,7 @@ def build_workbook(  # noqa: PLR0913
 ) -> bytes:
     book = Workbook()
     book.remove(book.active)
+    rows = [row for row in rows if str(row.get("type") or "").casefold() == "story"]
     today = generated_at.date()
     project_rows = projects(rows, today, project_catalog)
     _table(book, "Work Packages", FIELDS, rows)
@@ -85,9 +86,10 @@ def build_workbook(  # noqa: PLR0913
         ("source_system", "OpenProject"),
         ("source_endpoint", f"{base_url.rstrip('/')}/api/v3/work_packages"),
         ("repository_version", repository_version),
-        ("report_schema_version", "1"),
+        ("report_schema_version", "2"),
         ("timezone", timezone),
         ("row_count", len(rows)),
+        ("operational_unit", "Story"),
         ("project_count", len(project_rows)),
         ("google_drive_file_id", drive_file_id or ""),
     ]

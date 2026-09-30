@@ -7,9 +7,11 @@ import pytest
 from openpyxl import load_workbook
 
 from openproject_reports.config import load_config
+from openproject_reports.dagster.assets import openproject_reporting_dataset
 from openproject_reports.dagster.definitions import defs
+from openproject_reports.dagster.resources import RuntimeResource
 from openproject_reports.openproject import OpenProjectClient
-from openproject_reports.reporting import dataset, progress, projects
+from openproject_reports.reporting import dataset, normalize, progress, projects
 from openproject_reports.workbook import build_workbook
 
 NOW = datetime(2026, 9, 28, 12, tzinfo=UTC)
@@ -27,7 +29,7 @@ def package(
         "_links": {
             "project": {"href": "/api/v3/projects/2", "title": "Project B"},
             "status": {"title": status},
-            "type": {"title": "Task"},
+            "type": {"title": "Story"},
         },
     }
 
@@ -225,3 +227,173 @@ def test_definitions_registered():
     assert len(defs.resolve_asset_graph().get_all_asset_keys()) == 5
     assert defs.get_job_def("openproject_full_refresh")
     assert defs.get_schedule_def("openproject_daily")
+
+
+def typed_package(identifier, kind, status, parent=None):
+    item = package(identifier, status)
+    item["_links"]["type"]["title"] = kind
+    if parent is not None:
+        item["_links"]["parent"] = {"href": f"/api/v3/work_packages/{parent}"}
+    return item
+
+
+def test_story_hierarchy_and_operational_counts():
+    items = [
+        typed_package(10, "Initiative", "Closed"),
+        typed_package(11, "Epic", "In Progress", 10),
+        typed_package(12, "Story", "In Progress", 11),
+        typed_package(13, "Story", "Closed", 11),
+        typed_package(14, "Story", "Blocked", 11),
+        typed_package(15, "Task", "Closed", 12),
+        typed_package(16, "Milestone", "Blocked"),
+    ]
+    items[2]["_links"]["version"] = {"href": "/api/v3/versions/20", "title": "R1"}
+    rows = dataset(items, "https://example.test", NOW, "UTC")
+    assert [row["work_package_id"] for row in rows] == [12, 13, 14]
+    assert rows[0]["initiative_id"] == 10
+    assert rows[0]["initiative"] == "Work 10"
+    assert rows[0]["epic_id"] == 11
+    assert rows[0]["epic"] == "Work 11"
+    assert rows[0]["release_id"] == 20
+    assert rows[0]["release"] == rows[0]["version"] == "R1"
+    assert rows[0]["url"] == "https://example.test/work_packages/12"
+    project = projects(rows, NOW.date())[0]
+    assert (
+        project["total_work_packages"],
+        project["open"],
+        project["in_progress"],
+        project["blocked"],
+        project["completed"],
+    ) == (3, 2, 1, 1, 1)
+    assert progress(rows, NOW.date())[0]["completed"] == 1
+    for item in items[:2]:
+        item["_links"]["status"]["title"] = "Blocked"
+    assert projects(dataset(items, "https://example.test", NOW, "UTC"), NOW.date()) == [
+        project
+    ]
+
+
+def test_missing_and_cyclic_hierarchy():
+    orphan = typed_package(1, "Story", "New", 99)
+    cycle = typed_package(2, "Epic", "New", 3)
+    story = typed_package(3, "Story", "New", 2)
+    rows = dataset([orphan, cycle, story], "https://example.test", NOW, "UTC")
+    assert rows[0]["initiative_id"] is None
+    assert rows[0]["epic_id"] is None
+    assert rows[1]["epic_id"] == 2
+    assert rows[1]["initiative_id"] is None
+
+
+def activity(identifier, comment, created="2026-09-22T00:00:00Z"):
+    return {"id": identifier, "createdAt": created, "comment": {"raw": comment}}
+
+
+def test_latest_implementation_summary_and_workbook():
+    activities = [
+        activity(5, "Routine discussion", "2026-09-25T00:00:00Z"),
+        activity(3, "# Implementation summary\nFinal changes"),
+        activity(1, "Implementation update (WP-1)\nEarlier", "2026-09-20T00:00:00Z"),
+        activity(2, "Implementation summary\nOlder tie"),
+        activity(6, ""),
+        {"id": 7, "comment": "invalid"},
+        {"id": 8, "comment": {"raw": None}},
+    ]
+    rows = dataset(
+        [package(1, "Closed"), package(2, "New")],
+        "https://example.test",
+        NOW,
+        "UTC",
+        activities={1: activities},
+    )
+    assert (
+        rows[0]["implementation_summary"] == "# Implementation summary\nFinal changes"
+    )
+    assert rows[1]["implementation_summary"] is None
+    book = load_workbook(
+        BytesIO(build_workbook(rows, NOW, "https://example.test", "UTC"))
+    )
+    headers = [cell.value for cell in book["Work Packages"][1]]
+    assert (
+        book["Work Packages"].cell(2, headers.index("implementation_summary") + 1).value
+        == rows[0]["implementation_summary"]
+    )
+    assert "Routine discussion" not in str(list(book["Work Packages"].values))
+
+
+def test_activity_pagination_and_empty_collection():
+    class ActivitySession(Session):
+        def get(self, url, params, timeout):
+            assert url.endswith("/work_packages/1/activities")
+            assert timeout == 60
+            self.offsets.append(params["offset"])
+            return Response(
+                {
+                    "total": 2,
+                    "_embedded": {
+                        "elements": [
+                            activity(params["offset"], "Implementation update\nChange")
+                        ]
+                    },
+                }
+            )
+
+    session = ActivitySession()
+    client = OpenProjectClient("https://example.test", "token", session)  # type: ignore[arg-type]
+    result = client.activities(1, 1)
+    assert [row["id"] for row in result] == [1, 2]
+    assert session.offsets == [1, 2]
+
+    class EmptySession(Session):
+        def get(self, url, params, timeout):
+            assert url.endswith("/activities")
+            assert params["pageSize"] == 100
+            assert timeout == 60
+            return Response({"total": 0, "_embedded": {"elements": []}})
+
+    client = OpenProjectClient("https://example.test", "token", EmptySession())  # type: ignore[arg-type]
+    assert client.activities(1) == []
+
+
+def test_operational_consumers_exclude_hierarchy_rows():
+    rows = [
+        normalize(typed_package(i, kind, "Closed"), "https://example.test", NOW, "UTC")
+        for i, kind in enumerate(["Story", "Epic", "Initiative"], 1)
+    ]
+    assert projects(rows, NOW.date())[0]["completed"] == 1
+    assert progress(rows, NOW.date())[0]["completed"] == 1
+    book = load_workbook(
+        BytesIO(build_workbook(rows, NOW, "https://example.test", "UTC"))
+    )
+    assert book["Work Packages"].max_row == 2
+
+
+def test_reporting_asset_fetches_only_story_activities(monkeypatch):
+    requested = []
+
+    class Client:
+        def activities(self, identifier):
+            requested.append(identifier)
+            return [activity(1, "Implementation update (WP-3)\nImplemented")]
+
+    class Settings:
+        openproject_base_url = "https://example.test"
+        timezone = "UTC"
+
+    monkeypatch.setattr(RuntimeResource, "settings", lambda _: Settings())
+    monkeypatch.setattr(RuntimeResource, "openproject", lambda _: Client())
+    rows = openproject_reporting_dataset(
+        runtime=RuntimeResource(),
+        openproject_work_packages=[
+            typed_package(1, "Initiative", "Closed"),
+            typed_package(2, "Epic", "Blocked", 1),
+            typed_package(3, "Story", "Closed", 2),
+        ],
+    )
+    assert requested == [3]
+    assert isinstance(rows, list)
+    assert len(rows) == 1
+    assert (
+        rows[0]["implementation_summary"] == "Implementation update (WP-3)\nImplemented"
+    )
+    assert rows[0]["initiative_id"] == 1
+    assert rows[0]["epic_id"] == 2
