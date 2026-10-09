@@ -154,3 +154,8 @@ upload_to_vcs_release = true
 [tool.wood.openproject]
 project_id = 3
 initiative_id = 407
+
+[tool.wood.architecture]
+domain = "reporting"
+capability = "operational-reporting"
+kind = "orchestration-service"
